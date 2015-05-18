@@ -19,6 +19,7 @@ LOCALRC=localrc
 USER_LOCAL_CONF_NAME=.devstack.$LOCAL_CONF
 
 USERHOME=$HOME
+SUDO=sudo
 # Load options not checked into VCS.
 if [ -f $USERHOME/.redstack.options.rc ]; then
     . $USERHOME/.redstack.options.rc
@@ -115,12 +116,12 @@ function exclaim () {
 
 function pkg_install () {
     echo Installing $@...
-    sudo -E DEBIAN_FRONTEND=noninteractive $HTTP_PROXY apt-get $APT_GET_ARGS install $@
+    $(SUDO) -E DEBIAN_FRONTEND=noninteractive $HTTP_PROXY apt-get $APT_GET_ARGS install $@
 }
 
 function pkg_update () {
     echo Updating $@...
-    sudo -E DEBIAN_FRONTEND=noninteractive $HTTP_PROXY apt-get $APT_GET_ARGS update $@
+    $(SUDO) -E DEBIAN_FRONTEND=noninteractive $HTTP_PROXY apt-get $APT_GET_ARGS update $@
 }
 
 function set_home_dir() {
@@ -180,7 +181,7 @@ function install_prep_packages() {
     pkg_update
     exclaim 'Installing dependencies (part 1b)...'
     pkg_install git-core kvm-ipxe python-pip gettext
-    sudo -H $HTTP_PROXY pip install --upgrade pip dib-utils
+    $(SUDO) -H $HTTP_PROXY pip install --upgrade pip dib-utils
 }
 
 function install_devstack_code() {
@@ -194,9 +195,9 @@ function install_devstack_code() {
 
     exclaim "Installing devstack projects..."
     # Ensures present user can get to the devstack dirs
-    sudo mkdir -p $PATH_DEVSTACK_OUTPUT
+    $(SUDO) mkdir -p $PATH_DEVSTACK_OUTPUT
     if [ ! -w $PATH_DEVSTACK_OUTPUT ]; then
-        sudo chown `whoami` $PATH_DEVSTACK_OUTPUT
+        $(SUDO) chown `whoami` $PATH_DEVSTACK_OUTPUT
     fi
     # Clones all of the code to where devstack expects it to be
     pushd $PATH_DEVSTACK_OUTPUT
@@ -389,9 +390,12 @@ function run_devstack() {
 
 
 function cmd_install() {
-    sudo mkdir -p $TROVE_LOGDIR # Creates TROVE_LOGDIR if it does not exist
+    if [ "$1" = "-S" ]; then
+        SUDO="sudo -S"
+    fi
+    $(SUDO) mkdir -p $TROVE_LOGDIR # Creates TROVE_LOGDIR if it does not exist
     if [ ! -w $TROVE_LOGDIR ]; then
-        sudo chown `whoami` $TROVE_LOGDIR
+        $(SUDO) chown `whoami` $TROVE_LOGDIR
     fi
     install_prep_packages
     install_devstack_code
@@ -501,14 +505,14 @@ function cmd_unit_tests() {
 ###############################################################################
 
 function cmd_start_deps() {
-    if ! sudo vgs $VOLUME_GROUP; then
+    if ! $(SUDO) vgs $VOLUME_GROUP; then
         exclaim "Reconnecting Volume Group to Backing File"
-        sudo losetup -f --show ${VOLUME_BACKING_FILE}
+        $(SUDO) losetup -f --show ${VOLUME_BACKING_FILE}
     fi
 
     if ! egrep -q ${SWIFT_DATA_DIR}/drives/sdb1 /proc/mounts; then
         exclaim "Re-mounting Swift Disk Image"
-        sudo mount -t xfs -o loop,noatime,nodiratime,nobarrier,logbufs=8  ${SWIFT_DISK_IMAGE} ${SWIFT_DATA_DIR}/drives/sdb1 || true
+        $(SUDO) mount -t xfs -o loop,noatime,nodiratime,nobarrier,logbufs=8  ${SWIFT_DISK_IMAGE} ${SWIFT_DATA_DIR}/drives/sdb1 || true
     fi
 
     if [[ -e $PATH_DEVSTACK_SRC/stack-screenrc ]]; then
@@ -535,19 +539,19 @@ function rd_manage() {
 }
 
 function install_test_packages() {
-    sudo -H $HTTP_PROXY pip install openstack.nose_plugin proboscis pexpect
+    $(SUDO) -H $HTTP_PROXY pip install openstack.nose_plugin proboscis pexpect
 }
 
 function mod_confs() {
     DATASTORE_TYPE=$1
 
-    sudo install -b --mode 0664 $REDSTACK_SCRIPTS/conf/test_begin.conf $TEST_CONF
+    $(SUDO) install -b --mode 0664 $REDSTACK_SCRIPTS/conf/test_begin.conf $TEST_CONF
     TROVE_REPORT_DIR=$REDSTACK_SCRIPTS/../report/
     EXTRA_CONF=$REDSTACK_SCRIPTS/conf/test.extra.conf
     if [ -e $EXTRA_CONF ]; then
         cat $EXTRA_CONF >> $TEST_CONF
     fi
-    cat $REDSTACK_SCRIPTS/conf/test_end.conf | sudo tee -a $TEST_CONF > /dev/null
+    cat $REDSTACK_SCRIPTS/conf/test_end.conf | $(SUDO) tee -a $TEST_CONF > /dev/null
 
     #Add the paths to the test conf
     sed -i "s,%report_directory%,$TROVE_REPORT_DIR,g" $TEST_CONF
@@ -643,9 +647,9 @@ function cmd_build_image() {
     GUEST_USERNAME=${4:-'ubuntu'}
 
     exclaim "Ensuring we have all packages needed to build image."
-    sudo $HTTP_PROXY apt-get -y update
-    sudo $HTTP_PROXY apt-get -y install qemu
-    sudo -H $HTTP_PROXY pip install --upgrade pip dib-utils
+    $(SUDO) $HTTP_PROXY apt-get -y update
+    $(SUDO) $HTTP_PROXY apt-get -y install qemu
+    $(SUDO) -H $HTTP_PROXY pip install --upgrade pip dib-utils
     cmd_clone_projects do_not_force_update $REDSTACK_SCRIPTS/image-projects-list
 
     exclaim "Use tripleo-diskimagebuilder to actually build the Trove Guest Agent Image."
@@ -940,7 +944,7 @@ function cmd_run_ci() {
 function cmd_wipe_queues() {
     # Obliterate rabbit.
     for i in stop_app reset start_app "change_password guest $RABBIT_PASSWORD"; \
-    do sudo rabbitmqctl $i; done
+    do $(SUDO) rabbitmqctl $i; done
 }
 
 function cmd_clear() {
@@ -969,13 +973,13 @@ function cmd_dsvm_gate_tests() {
     echo "User=ubuntu" >> /home/jenkins/.ssh/config
 
     # Fix iptables rules that prevent amqp connections from the devstack box to the guests
-    sudo iptables -D openstack-INPUT -j REJECT --reject-with icmp-host-prohibited || true
+    $(SUDO) iptables -D openstack-INPUT -j REJECT --reject-with icmp-host-prohibited || true
 
-    sudo chown -R $(whoami) /etc/trove
-    sudo chown -R $(whoami) $DEST/trove-integration
+    $(SUDO) chown -R $(whoami) /etc/trove
+    $(SUDO) chown -R $(whoami) $DEST/trove-integration
     iniset $TROVE_GUESTAGENT_CONF DEFAULT rabbit_host $NETWORK_GATEWAY
     cd $DEST/trove-integration/scripts
-    sudo -H $HTTP_PROXY pip install --upgrade pip dib-utils
+    $(SUDO) -H $HTTP_PROXY pip install --upgrade pip dib-utils
 
     cmd_kick_start $DATASTORE_TYPE
 
@@ -1087,7 +1091,7 @@ function run_command() {
     fi
 
     case "$1" in
-        "install" ) cmd_install;;
+        "install" ) cmd_install $@;;
         "test-init" ) cmd_test_init $@;;
         "build-image" ) shift; cmd_build_image $@;;
         "initialize" ) cmd_initialize;;
