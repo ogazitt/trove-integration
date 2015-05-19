@@ -390,6 +390,7 @@ function run_devstack() {
 
 
 function cmd_install() {
+    echo $1
     if [ "$1" = "-S" ]; then
         SUDO="sudo -S"
         echo "SUDO is set to $SUDO"
@@ -1092,7 +1093,7 @@ function run_command() {
     fi
 
     case "$1" in
-        "install" ) cmd_install $@;;
+        "install" ) shift; cmd_install $@;;
         "test-init" ) cmd_test_init $@;;
         "build-image" ) shift; cmd_build_image $@;;
         "initialize" ) cmd_initialize;;
