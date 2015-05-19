@@ -390,10 +390,8 @@ function run_devstack() {
 
 
 function cmd_install() {
-    echo $1
     if [ "$1" = "-S" ]; then
         SUDO="sudo -S"
-        echo "SUDO is set to $SUDO"
     fi
     $SUDO mkdir -p $TROVE_LOGDIR # Creates TROVE_LOGDIR if it does not exist
     if [ ! -w $TROVE_LOGDIR ]; then
